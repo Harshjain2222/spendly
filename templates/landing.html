@@ -18,7 +18,7 @@
     </p>
     <div class="hero-actions">
         <a href="{{ url_for('register') }}" class="btn-primary">Create free account</a>
-        <a href="#" class="btn-primary">See how it works</a>
+        <a href="#" class="btn-primary" id="btn-how-it-works">See how it works</a>
     </div>
 
     <div class="hero-visual">
@@ -97,4 +97,71 @@
     </div>
 </section>
 
+<!-- ── Video modal ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="video-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-label="How Spendly works">
+    <div class="modal-content">
+        <button class="modal-close" id="modal-close" aria-label="Close video">&times;</button>
+        <div class="modal-box">
+            <div class="modal-video-wrap">
+                <iframe
+                    id="video-frame"
+                    src=""
+                    data-src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1"
+                    title="How Spendly works"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+                </iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var overlay  = document.getElementById('video-modal');
+    var frame    = document.getElementById('video-frame');
+    var openBtn  = document.getElementById('btn-how-it-works');
+    var closeBtn = document.getElementById('modal-close');
+    var videoSrc = frame.getAttribute('data-src');
+
+    function openModal() {
+        frame.src = videoSrc;               /* load + autoplay the video */
+        overlay.classList.add('is-open');
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden'; /* prevent background scroll */
+    }
+
+    function closeModal() {
+        frame.src = '';                     /* kills audio/video instantly */
+        overlay.classList.remove('is-open');
+        overlay.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    }
+
+    /* Open on button click */
+    openBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        openModal();
+    });
+
+    /* Close on ✕ button */
+    closeBtn.addEventListener('click', closeModal);
+
+    /* Close when clicking the dark overlay (outside the box) */
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) { closeModal(); }
+    });
+
+    /* Close on Escape key */
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay.classList.contains('is-open')) {
+            closeModal();
+        }
+    });
+}());
+</script>
 {% endblock %}
