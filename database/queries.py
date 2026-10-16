@@ -53,31 +53,46 @@ def get_user_by_id(user_id):
 # Summary stats                                                        #
 # ------------------------------------------------------------------ #
 
-def get_summary_stats(user_id):
+def get_summary_stats(user_id, date_from=None, date_to=None):
     """
     Return a dict with 'total_spent' (float), 'transaction_count' (int),
-    and 'top_category' (str) for the given user_id.
+    and 'top_category' (str) for the given user_id, optionally filtered by date.
     Returns zero values rather than raising when the user has no expenses.
     """
     db = get_db()
     try:
-        stats_row = db.execute(
-            """SELECT COUNT(*) AS total_count,
-                      COALESCE(SUM(amount), 0) AS total_spent
-               FROM expenses WHERE user_id = ?""",
-            (user_id,),
-        ).fetchone()
+        if date_from and date_to:
+            stats_row = db.execute(
+                """SELECT COUNT(*) AS total_count,
+                          COALESCE(SUM(amount), 0) AS total_spent
+                   FROM expenses WHERE user_id = ? AND date BETWEEN ? AND ?""",
+                (user_id, date_from, date_to),
+            ).fetchone()
 
-        top_row = db.execute(
-            """SELECT category, SUM(amount) AS cat_total
-               FROM expenses WHERE user_id = ?
-               GROUP BY category ORDER BY cat_total DESC LIMIT 1""",
-            (user_id,),
-        ).fetchone()
+            top_row = db.execute(
+                """SELECT category, SUM(amount) AS cat_total
+                   FROM expenses WHERE user_id = ? AND date BETWEEN ? AND ?
+                   GROUP BY category ORDER BY cat_total DESC LIMIT 1""",
+                (user_id, date_from, date_to),
+            ).fetchone()
+        else:
+            stats_row = db.execute(
+                """SELECT COUNT(*) AS total_count,
+                          COALESCE(SUM(amount), 0) AS total_spent
+                   FROM expenses WHERE user_id = ?""",
+                (user_id,),
+            ).fetchone()
+
+            top_row = db.execute(
+                """SELECT category, SUM(amount) AS cat_total
+                   FROM expenses WHERE user_id = ?
+                   GROUP BY category ORDER BY cat_total DESC LIMIT 1""",
+                (user_id,),
+            ).fetchone()
 
         return {
-            "total_spent": stats_row["total_spent"],
-            "transaction_count": stats_row["total_count"],
+            "total_spent": stats_row["total_spent"] if stats_row and stats_row["total_spent"] else 0,
+            "transaction_count": stats_row["total_count"] if stats_row and stats_row["total_count"] else 0,
             "top_category": top_row["category"] if top_row else "—",
         }
     finally:
@@ -88,19 +103,28 @@ def get_summary_stats(user_id):
 # Recent transactions                                                  #
 # ------------------------------------------------------------------ #
 
-def get_recent_transactions(user_id, limit=10):
+def get_recent_transactions(user_id, limit=10, date_from=None, date_to=None):
     """
     Return a list of dicts (newest first), each with 'date', 'description',
-    'category', and 'amount'. Returns an empty list when there are no expenses.
+    'category', and 'amount', optionally filtered by date.
+    Returns an empty list when there are no expenses.
     """
     db = get_db()
     try:
-        rows = db.execute(
-            """SELECT date, description, category, amount
-               FROM expenses WHERE user_id = ?
-               ORDER BY date DESC, id DESC LIMIT ?""",
-            (user_id, limit),
-        ).fetchall()
+        if date_from and date_to:
+            rows = db.execute(
+                """SELECT date, description, category, amount
+                   FROM expenses WHERE user_id = ? AND date BETWEEN ? AND ?
+                   ORDER BY date DESC, id DESC LIMIT ?""",
+                (user_id, date_from, date_to, limit),
+            ).fetchall()
+        else:
+            rows = db.execute(
+                """SELECT date, description, category, amount
+                   FROM expenses WHERE user_id = ?
+                   ORDER BY date DESC, id DESC LIMIT ?""",
+                (user_id, limit),
+            ).fetchall()
 
         return [
             {
@@ -128,10 +152,10 @@ def _bar_class(pct):
     return "bar-w-100"
 
 
-def get_category_breakdown(user_id):
+def get_category_breakdown(user_id, date_from=None, date_to=None):
     """
     Return a list of dicts ordered by amount descending, each with:
-      'category', 'amount', 'percentage' (int), 'css_class'.
+      'category', 'amount', 'percentage' (int), 'css_class', optionally filtered by date.
 
     Percentages are computed using the largest-remainder method so they
     always sum to exactly 100 (or 0 when the user has no expenses).
@@ -139,12 +163,20 @@ def get_category_breakdown(user_id):
     """
     db = get_db()
     try:
-        rows = db.execute(
-            """SELECT category, SUM(amount) AS cat_total
-               FROM expenses WHERE user_id = ?
-               GROUP BY category ORDER BY cat_total DESC""",
-            (user_id,),
-        ).fetchall()
+        if date_from and date_to:
+            rows = db.execute(
+                """SELECT category, SUM(amount) AS cat_total
+                   FROM expenses WHERE user_id = ? AND date BETWEEN ? AND ?
+                   GROUP BY category ORDER BY cat_total DESC""",
+                (user_id, date_from, date_to),
+            ).fetchall()
+        else:
+            rows = db.execute(
+                """SELECT category, SUM(amount) AS cat_total
+                   FROM expenses WHERE user_id = ?
+                   GROUP BY category ORDER BY cat_total DESC""",
+                (user_id,),
+            ).fetchall()
 
         if not rows:
             return []

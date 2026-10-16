@@ -1,8 +1,10 @@
-﻿from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 import re
 import os
+from datetime import datetime, timedelta
+import calendar
 from database.db import get_db, init_db, seed_db
 from database.queries import (
     get_user_by_id,
@@ -130,9 +132,61 @@ def profile():
         session.clear()
         return redirect(url_for("login"))
 
-    stats = get_summary_stats(user_id)
-    recent_transactions = get_recent_transactions(user_id, limit=10)
-    category_breakdown = get_category_breakdown(user_id)
+    raw_from = request.args.get("date_from", "").strip()
+    raw_to = request.args.get("date_to", "").strip()
+
+    date_from = None
+    date_to = None
+
+    if raw_from and raw_to:
+        try:
+            d_from = datetime.strptime(raw_from, "%Y-%m-%d").date()
+            d_to = datetime.strptime(raw_to, "%Y-%m-%d").date()
+            if d_from > d_to:
+                flash("Start date must be before end date.", "error")
+            else:
+                date_from = raw_from
+                date_to = raw_to
+        except ValueError:
+            # Malformed date string silently falls back to unfiltered view
+            pass
+
+    today = datetime.now().date()
+
+    # Preset 1: This Month (first day of current calendar month to last day)
+    last_day_of_month = calendar.monthrange(today.year, today.month)[1]
+    this_month_from = today.replace(day=1).strftime("%Y-%m-%d")
+    this_month_to = today.replace(day=last_day_of_month).strftime("%Y-%m-%d")
+
+    # Preset 2: Last 3 Months (3-month window ending today)
+    last_3m_from = (today - timedelta(days=90)).strftime("%Y-%m-%d")
+    last_3m_to = today.strftime("%Y-%m-%d")
+
+    # Preset 3: Last 6 Months (6-month window ending today)
+    last_6m_from = (today - timedelta(days=180)).strftime("%Y-%m-%d")
+    last_6m_to = today.strftime("%Y-%m-%d")
+
+    presets = {
+        "this_month": {"date_from": this_month_from, "date_to": this_month_to},
+        "last_3_months": {"date_from": last_3m_from, "date_to": last_3m_to},
+        "last_6_months": {"date_from": last_6m_from, "date_to": last_6m_to},
+    }
+
+    # Determine active preset
+    if not date_from and not date_to:
+        active_preset = "all_time"
+    elif date_from == this_month_from and (date_to == this_month_to or date_to == today.strftime("%Y-%m-%d")):
+        active_preset = "this_month"
+    elif date_from == last_3m_from and date_to == last_3m_to:
+        active_preset = "last_3_months"
+    elif date_from == last_6m_from and date_to == last_6m_to:
+        active_preset = "last_6_months"
+    else:
+        active_preset = "custom"
+
+    stats = get_summary_stats(user_id, date_from=date_from, date_to=date_to)
+    recent_transactions = get_recent_transactions(user_id, limit=10, date_from=date_from, date_to=date_to)
+    category_breakdown = get_category_breakdown(user_id, date_from=date_from, date_to=date_to)
 
     return render_template(
         "profile.html",
@@ -140,6 +194,10 @@ def profile():
         stats=stats,
         transactions=recent_transactions,
         categories=category_breakdown,
+        date_from=date_from,
+        date_to=date_to,
+        active_preset=active_preset,
+        presets=presets,
     )
 
 
