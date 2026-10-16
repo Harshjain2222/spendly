@@ -141,7 +141,13 @@
                         <i data-lucide="clock" class="card-header-icon"></i>
                         <h2 class="profile-card-title">Recent Transactions</h2>
                     </div>
-                    <span class="profile-badge-count">{{ transactions|length }} entries</span>
+                    <div class="card-header-actions">
+                        <span class="profile-badge-count">{{ transactions|length }} entries</span>
+                        <a href="{{ url_for('add_expense') }}" class="btn-profile-add">
+                            <i data-lucide="plus" class="btn-icon"></i>
+                            <span>Add Expense</span>
+                        </a>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="profile-table">

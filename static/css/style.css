@@ -1433,6 +1433,78 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+.card-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.btn-profile-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.8rem;
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: var(--radius-sm);
+    font-size: 0.825rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.2s ease;
+}
+
+.btn-profile-add:hover {
+    background: var(--accent);
+}
+
+.btn-profile-add .btn-icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* Add expense form styling */
+.input-with-prefix {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.currency-prefix {
+    position: absolute;
+    left: 0.85rem;
+    color: var(--ink-muted);
+    font-size: 1rem;
+    font-weight: 500;
+    pointer-events: none;
+}
+
+.input-with-prefix .form-input {
+    padding-left: 2.2rem;
+}
+
+.form-select {
+    cursor: pointer;
+    background-color: var(--paper);
+    color: var(--ink);
+}
+
+.label-hint {
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    font-weight: normal;
+}
+
+.form-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin-top: 1.5rem;
+}
+
+.btn-save-expense {
+    flex: 1;
+}
+
 /* ------------------------------------------------------------------ */
 /* Responsive                                                          */
 /* ------------------------------------------------------------------ */

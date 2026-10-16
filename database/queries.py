@@ -206,3 +206,27 @@ def get_category_breakdown(user_id, date_from=None, date_to=None):
         ]
     finally:
         db.close()
+
+
+# ------------------------------------------------------------------ #
+# Insert expense                                                      #
+# ------------------------------------------------------------------ #
+
+def insert_expense(user_id, amount, category, date, description=None):
+    """
+    Insert a new expense record for the given user_id.
+    Stores None as NULL in SQLite for empty descriptions.
+    Returns the new row ID.
+    """
+    db = get_db()
+    try:
+        cursor = db.execute(
+            """INSERT INTO expenses (user_id, amount, category, date, description)
+               VALUES (?, ?, ?, ?, ?)""",
+            (user_id, amount, category, date, description),
+        )
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        db.close()
+
