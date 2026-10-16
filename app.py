@@ -11,6 +11,7 @@ from database.queries import (
     get_summary_stats,
     get_recent_transactions,
     get_category_breakdown,
+    insert_expense,
 )
 
 app = Flask(__name__)
@@ -201,9 +202,84 @@ def profile():
     )
 
 
-@app.route("/expenses/add")
+CATEGORIES = [
+    "Food",
+    "Transport",
+    "Bills",
+    "Health",
+    "Entertainment",
+    "Shopping",
+    "Other",
+]
+
+
+@app.route("/expenses/add", methods=["GET", "POST"])
 def add_expense():
-    return "Add expense — coming in Step 7"
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        amount_raw = request.form.get("amount", "").strip()
+        category = request.form.get("category", "").strip()
+        date_raw = request.form.get("date", "").strip()
+        description_raw = request.form.get("description", "").strip()
+        description = description_raw if description_raw else None
+
+        error = None
+        amount = None
+
+        if not amount_raw:
+            error = "Amount is required."
+        else:
+            try:
+                amount = float(amount_raw)
+                if amount <= 0:
+                    error = "Amount must be a positive number greater than 0."
+            except ValueError:
+                error = "Please enter a valid numeric amount."
+
+        if not error and (not category or category not in CATEGORIES):
+            error = "Please select a valid category."
+
+        if not error:
+            if not date_raw:
+                error = "Date is required."
+            else:
+                try:
+                    datetime.strptime(date_raw, "%Y-%m-%d")
+                except ValueError:
+                    error = "Please enter a valid date in YYYY-MM-DD format."
+
+        if not error:
+            if description and len(description) > 200:
+                description = description[:200]
+
+            insert_expense(
+                user_id=user_id,
+                amount=amount,
+                category=category,
+                date=date_raw,
+                description=description,
+            )
+            return redirect(url_for("profile"))
+
+        return render_template(
+            "add_expense.html",
+            error=error,
+            categories=CATEGORIES,
+            amount=amount_raw,
+            category=category,
+            date=date_raw,
+            description=description_raw,
+        )
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    return render_template(
+        "add_expense.html",
+        categories=CATEGORIES,
+        date=today,
+    )
 
 
 @app.route("/expenses/<int:id>/edit")
