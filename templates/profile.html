@@ -2,9 +2,27 @@
 
 {% block title %}Profile — Spendly{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
 {% block content %}
 <section class="profile-section">
     <div class="profile-container">
+
+        <!-- Flashed error / notification messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="profile-alerts">
+                {% for category, message in messages %}
+                <div class="profile-alert profile-alert-{{ category }}">
+                    <i data-lucide="alert-circle" class="alert-icon"></i>
+                    <span>{{ message }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endwith %}
 
         <!-- 1. User info card -->
         <div class="profile-header-card">
@@ -29,6 +47,53 @@
                     <span>Sign out</span>
                 </a>
             </div>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="profile-filter-card">
+            <div class="profile-filter-presets">
+                <span class="filter-section-label">Quick filter:</span>
+                <div class="preset-buttons">
+                    <a href="{{ url_for('profile', date_from=presets.this_month.date_from, date_to=presets.this_month.date_to) }}"
+                       class="btn-preset {% if active_preset == 'this_month' %}active{% endif %}">
+                        This Month
+                    </a>
+                    <a href="{{ url_for('profile', date_from=presets.last_3_months.date_from, date_to=presets.last_3_months.date_to) }}"
+                       class="btn-preset {% if active_preset == 'last_3_months' %}active{% endif %}">
+                        Last 3 Months
+                    </a>
+                    <a href="{{ url_for('profile', date_from=presets.last_6_months.date_from, date_to=presets.last_6_months.date_to) }}"
+                       class="btn-preset {% if active_preset == 'last_6_months' %}active{% endif %}">
+                        Last 6 Months
+                    </a>
+                    <a href="{{ url_for('profile') }}"
+                       class="btn-preset {% if active_preset == 'all_time' %}active{% endif %}">
+                        All Time
+                    </a>
+                </div>
+            </div>
+
+            <form method="GET" action="{{ url_for('profile') }}" class="profile-filter-custom {% if active_preset == 'custom' %}active-custom{% endif %}">
+                <div class="custom-range-inputs">
+                    <div class="date-input-group">
+                        <label for="date_from" class="date-label">From</label>
+                        <input type="date" id="date_from" name="date_from"
+                               value="{{ date_from or '' }}"
+                               class="date-input" required>
+                    </div>
+                    <span class="date-separator">to</span>
+                    <div class="date-input-group">
+                        <label for="date_to" class="date-label">To</label>
+                        <input type="date" id="date_to" name="date_to"
+                               value="{{ date_to or '' }}"
+                               class="date-input" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-filter-apply">
+                    <i data-lucide="filter" class="btn-icon"></i>
+                    <span>Apply</span>
+                </button>
+            </form>
         </div>
 
         <!-- 2. Summary stats row -->
@@ -100,6 +165,10 @@
                                 </td>
                                 <td class="tabular font-medium text-right">₹{{ "{:,.2f}".format(tx.amount) }}</td>
                             </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted empty-state-cell">No transactions found for the selected period.</td>
+                            </tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -128,6 +197,10 @@
                         <div class="breakdown-bar-track">
                             <div class="breakdown-bar-fill bar-fill-{{ cat.category|lower }} {{ cat.css_class }}"></div>
                         </div>
+                    </div>
+                    {% else %}
+                    <div class="empty-state-block text-muted">
+                        <span>No expense categories found for this period.</span>
                     </div>
                     {% endfor %}
                 </div>
