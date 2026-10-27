@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 import re
@@ -12,6 +12,8 @@ from database.queries import (
     get_recent_transactions,
     get_category_breakdown,
     insert_expense,
+    get_expense_by_id,
+    update_expense,
 )
 
 app = Flask(__name__)
@@ -282,9 +284,82 @@ def add_expense():
     )
 
 
-@app.route("/expenses/<int:id>/edit")
+@app.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
 def edit_expense(id):
-    return "Edit expense — coming in Step 8"
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+
+    expense = get_expense_by_id(id, user_id)
+    if expense is None:
+        abort(404)
+
+    if request.method == "POST":
+        amount_raw = request.form.get("amount", "").strip()
+        category = request.form.get("category", "").strip()
+        date_raw = request.form.get("date", "").strip()
+        description_raw = request.form.get("description", "").strip()
+        description = description_raw if description_raw else None
+
+        error = None
+        amount = None
+
+        if not amount_raw:
+            error = "Amount is required."
+        else:
+            try:
+                amount = float(amount_raw)
+                if amount <= 0:
+                    error = "Amount must be a positive number greater than 0."
+            except ValueError:
+                error = "Please enter a valid numeric amount."
+
+        if not error and (not category or category not in CATEGORIES):
+            error = "Please select a valid category."
+
+        if not error:
+            if not date_raw:
+                error = "Date is required."
+            else:
+                try:
+                    datetime.strptime(date_raw, "%Y-%m-%d")
+                except ValueError:
+                    error = "Please enter a valid date in YYYY-MM-DD format."
+
+        if not error:
+            if description and len(description) > 200:
+                description = description[:200]
+
+            update_expense(
+                expense_id=id,
+                user_id=user_id,
+                amount=amount,
+                category=category,
+                date=date_raw,
+                description=description,
+            )
+            return redirect(url_for("profile"))
+
+        # Re-render with submitted (not original) values + error message
+        return render_template(
+            "edit_expense.html",
+            error=error,
+            categories=CATEGORIES,
+            expense={
+                "id": id,
+                "amount": amount_raw,
+                "category": category,
+                "date": date_raw,
+                "description": description_raw,
+            },
+        )
+
+    # GET — render form pre-filled with the current DB values
+    return render_template(
+        "edit_expense.html",
+        categories=CATEGORIES,
+        expense=expense,
+    )
 
 
 @app.route("/expenses/<int:id>/delete")

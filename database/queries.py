@@ -105,22 +105,23 @@ def get_summary_stats(user_id, date_from=None, date_to=None):
 
 def get_recent_transactions(user_id, limit=10, date_from=None, date_to=None):
     """
-    Return a list of dicts (newest first), each with 'date', 'description',
-    'category', and 'amount', optionally filtered by date.
+    Return a list of dicts (newest first), each with 'id', 'date',
+    'description', 'category', and 'amount', optionally filtered by date.
+    The 'id' field is included so templates can build edit/delete links.
     Returns an empty list when there are no expenses.
     """
     db = get_db()
     try:
         if date_from and date_to:
             rows = db.execute(
-                """SELECT date, description, category, amount
+                """SELECT id, date, description, category, amount
                    FROM expenses WHERE user_id = ? AND date BETWEEN ? AND ?
                    ORDER BY date DESC, id DESC LIMIT ?""",
                 (user_id, date_from, date_to, limit),
             ).fetchall()
         else:
             rows = db.execute(
-                """SELECT date, description, category, amount
+                """SELECT id, date, description, category, amount
                    FROM expenses WHERE user_id = ?
                    ORDER BY date DESC, id DESC LIMIT ?""",
                 (user_id, limit),
@@ -128,6 +129,7 @@ def get_recent_transactions(user_id, limit=10, date_from=None, date_to=None):
 
         return [
             {
+                "id": r["id"],
                 "date": r["date"],
                 "description": r["description"],
                 "category": r["category"],
@@ -230,3 +232,42 @@ def insert_expense(user_id, amount, category, date, description=None):
     finally:
         db.close()
 
+
+# ------------------------------------------------------------------ #
+# Get / Update expense (for edit flow)                               #
+# ------------------------------------------------------------------ #
+
+def get_expense_by_id(expense_id, user_id):
+    """
+    Return a single expense row as a sqlite3.Row if it exists AND belongs to
+    the given user_id. Returns None otherwise (not found or wrong owner).
+    Ownership is enforced at the SQL level: WHERE id = ? AND user_id = ?.
+    """
+    db = get_db()
+    try:
+        return db.execute(
+            """SELECT id, user_id, amount, category, date, description
+               FROM expenses WHERE id = ? AND user_id = ?""",
+            (expense_id, user_id),
+        ).fetchone()
+    finally:
+        db.close()
+
+
+def update_expense(expense_id, user_id, amount, category, date, description):
+    """
+    UPDATE the expense row matching both id AND user_id.
+    If the expense doesn't exist or belongs to another user, 0 rows are
+    affected and no error is raised — a silent no-op that is safe by design.
+    """
+    db = get_db()
+    try:
+        db.execute(
+            """UPDATE expenses
+               SET amount = ?, category = ?, date = ?, description = ?
+               WHERE id = ? AND user_id = ?""",
+            (amount, category, date, description, expense_id, user_id),
+        )
+        db.commit()
+    finally:
+        db.close()
