@@ -171,8 +171,12 @@
                                     </span>
                                 </td>
                                 <td class="tabular font-medium text-right">₹{{ "{:,.2f}".format(tx.amount) }}</td>
-                                <td>
+                                <td class="table-actions-cell">
                                     <a href="/expenses/{{ tx.id }}/edit" class="btn-table-action">Edit</a>
+                                    <form method="POST" action="/expenses/{{ tx.id }}/delete" style="display:inline"
+                                          onsubmit="return confirm('Delete this expense?')">
+                                        <button type="submit" class="btn-delete">Delete</button>
+                                    </form>
                                 </td>
                             </tr>
                             {% else %}

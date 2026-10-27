@@ -271,3 +271,31 @@
     background: var(--accent);
     color: var(--paper-card);
 }
+
+
+.table-actions-cell {
+    white-space: nowrap;
+}
+
+.table-actions-cell form {
+    margin-left: 0.35rem;
+}
+
+.btn-delete {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--danger);
+    font-size: 0.8rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-delete:hover {
+    background: var(--danger);
+    color: var(--paper-card);
+}
