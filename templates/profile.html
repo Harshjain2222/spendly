@@ -157,6 +157,7 @@
                                 <th>Description</th>
                                 <th>Category</th>
                                 <th class="text-right">Amount</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -170,10 +171,13 @@
                                     </span>
                                 </td>
                                 <td class="tabular font-medium text-right">₹{{ "{:,.2f}".format(tx.amount) }}</td>
+                                <td>
+                                    <a href="/expenses/{{ tx.id }}/edit" class="btn-table-action">Edit</a>
+                                </td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="4" class="text-center text-muted empty-state-cell">No transactions found for the selected period.</td>
+                                <td colspan="5" class="text-center text-muted empty-state-cell">No transactions found for the selected period.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
