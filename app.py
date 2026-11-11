@@ -97,7 +97,9 @@ def register():
             db.session.rollback()
             return render_template("register.html", error="Email is already registered.", name=name, email=email)
 
-        return redirect(url_for("login"))
+        session["user_id"] = new_user.id
+        session["user_name"] = new_user.name
+        return redirect(url_for("profile"))
 
     return render_template("register.html")
 
