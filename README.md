@@ -189,7 +189,7 @@ For local testing, set `MCP_URL=http://localhost:8000/mcp` in the website `.env`
 
 ### MCP server (Railway)
 
-1. Push `mcp-server/` to GitHub and create a Railway service from the repo.
+1. Push `mcp-server/` to GitHub (my repo : https://github.com/Harshjain2222/expense-tracker) and create a Railway service from the repo.
 2. Add variables: `DATABASE_URL`, `JWT_SECRET`.
 3. In Settings, then Networking, generate a public domain pointing to the port the app logs on startup (Railway sets `PORT`).
 4. Your MCP URL is `https://<domain>/mcp`.
