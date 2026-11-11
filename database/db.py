@@ -1,88 +1,57 @@
-import sqlite3
+"""
+database/db.py
+--------------
+SQLAlchemy + Flask-SQLAlchemy setup for Spendly.
+
+URL priority:
+  1. DATABASE_URL_POOLED  (pooled Neon connection — used by the running app)
+  2. DATABASE_URL          (direct Neon connection — fallback)
+  3. sqlite:///local.db    (last-resort local dev fallback)
+
+Both "postgres://" and "postgresql://" schemes are accepted; the former is
+silently normalised to the latter so SQLAlchemy does not reject it.
+
+pool_pre_ping=True is set so Neon's idle-connection drops do not break
+in-flight requests.
+
+NOTE: db.create_all() is intentionally absent — schema is managed exclusively
+      through Flask-Migrate (flask db migrate / flask db upgrade).
+"""
+
 import os
-from werkzeug.security import generate_password_hash
 
-# Resolve DB path relative to this file so it always lands in the project root
-_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "spendly.db")
+from dotenv import load_dotenv
+from flask_sqlalchemy import SQLAlchemy
 
+load_dotenv()
 
-def get_db():
-    """Open and return a SQLite connection with row_factory and FK enforcement."""
-    conn = sqlite3.connect(os.path.abspath(_DB_PATH))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+db = SQLAlchemy()
 
 
-def init_db():
-    """Create tables if they don't exist. Safe to call multiple times."""
-    conn = get_db()
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS users (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            name          TEXT    NOT NULL,
-            email         TEXT    UNIQUE NOT NULL,
-            password_hash TEXT    NOT NULL,
-            created_at    TEXT    DEFAULT (datetime('now'))
-        );
-
-        CREATE TABLE IF NOT EXISTS expenses (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id     INTEGER NOT NULL REFERENCES users(id),
-            amount      REAL    NOT NULL,
-            category    TEXT    NOT NULL,
-            date        TEXT    NOT NULL,
-            description TEXT,
-            created_at  TEXT    DEFAULT (datetime('now'))
-        );
-    """)
-    conn.commit()
-    conn.close()
-
-
-def seed_db():
-    """Insert demo user + 8 sample expenses. Skips if data already exists."""
-    conn = get_db()
-
-    # Guard: skip if any users already exist
-    existing = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    if existing > 0:
-        conn.close()
-        return
-
-    # Insert demo user
-    conn.execute(
-        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-        (
-            "Demo User",
-            "demo@spendly.com",
-            generate_password_hash("demo123"),
-        ),
+def _resolve_db_url() -> str:
+    """Return the database URL to use, with scheme normalisation."""
+    raw = (
+        os.environ.get("DATABASE_URL_POOLED", "").strip()
+        or os.environ.get("DATABASE_URL", "").strip()
+        or "sqlite:///local.db"
     )
-    conn.commit()
+    # SQLAlchemy ≥ 1.4 dropped the legacy "postgres://" scheme.
+    if raw.startswith("postgres://"):
+        raw = "postgresql://" + raw[len("postgres://"):]
+    # SQLAlchemy 2.x defaults to the psycopg (v3) driver; force psycopg2 since
+    # only psycopg2-binary is installed.
+    if raw.startswith("postgresql://") and "+psycopg" not in raw:
+        raw = "postgresql+psycopg2://" + raw[len("postgresql://"):]
+    return raw
 
-    user_id = conn.execute(
-        "SELECT id FROM users WHERE email = ?", ("demo@spendly.com",)
-    ).fetchone()["id"]
 
-    # 8 sample expenses across all 7 categories, dates in October 2026
-    sample_expenses = [
-        (user_id, 12.50,  "Food",          "2026-10-01", "Lunch at café"),
-        (user_id, 45.00,  "Transport",     "2026-10-03", "Monthly bus pass top-up"),
-        (user_id, 120.00, "Bills",         "2026-10-05", "Electricity bill"),
-        (user_id, 30.00,  "Health",        "2026-10-07", "Pharmacy — vitamins"),
-        (user_id, 25.00,  "Entertainment", "2026-10-08", "Cinema tickets"),
-        (user_id, 89.99,  "Shopping",      "2026-10-10", "New headphones"),
-        (user_id, 15.75,  "Food",          "2026-10-12", "Grocery run"),
-        (user_id, 9.99,   "Other",         "2026-10-15", "Subscription renewal"),
-    ]
-
-    conn.executemany(
-        """
-        INSERT INTO expenses (user_id, amount, category, date, description)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        sample_expenses,
-    )
-    conn.commit()
-    conn.close()
+def configure_db(app) -> None:
+    """
+    Attach SQLAlchemy to *app* using the resolved DATABASE_URL.
+    Call this before creating the Migrate instance.
+    """
+    url = _resolve_db_url()
+    app.config["SQLALCHEMY_DATABASE_URI"] = url
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+    app.config.setdefault("SQLALCHEMY_TRACK_MODIFICATIONS", False)
+    db.init_app(app)

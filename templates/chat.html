@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+
+{% block title %}AI Chat — Spendly{% endblock %}
+
+{% block head %}
+<style>
+  /* ---- Chat page layout ------------------------------------------ */
+  .chat-section {
+    max-width: 760px;
+    margin: 2.5rem auto;
+    padding: 0 1.25rem 4rem;
+  }
+
+  .chat-heading {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    color: var(--ink);
+    margin-bottom: .25rem;
+  }
+
+  .chat-subheading {
+    color: var(--ink-muted);
+    font-size: .9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* ---- Quick prompts --------------------------------------------- */
+  .chat-prompts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .chat-prompt-btn {
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: .4rem .85rem;
+    font-family: var(--font-body);
+    font-size: .82rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+
+  .chat-prompt-btn:hover {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ---- Message window -------------------------------------------- */
+  .chat-window {
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    min-height: 420px;
+    max-height: 520px;
+    overflow-y: auto;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    scroll-behavior: smooth;
+  }
+
+  .chat-empty {
+    color: var(--ink-faint);
+    font-size: .9rem;
+    margin: auto;
+    text-align: center;
+  }
+
+  /* ---- Individual messages --------------------------------------- */
+  .msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 80%;
+    gap: .2rem;
+  }
+
+  .msg-user {
+    align-self: flex-end;
+    align-items: flex-end;
+  }
+
+  .msg-assistant {
+    align-self: flex-start;
+    align-items: flex-start;
+  }
+
+  .msg-bubble {
+    padding: .6rem .9rem;
+    border-radius: var(--radius-sm);
+    font-size: .9rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .msg-user .msg-bubble {
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 2px;
+  }
+
+  .msg-assistant .msg-bubble {
+    background: var(--paper-warm);
+    color: var(--ink);
+    border-bottom-left-radius: 2px;
+  }
+
+  .msg-label {
+    font-size: .72rem;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  /* ---- Thinking indicator --------------------------------------- */
+  .msg-thinking .msg-bubble {
+    color: var(--ink-muted);
+    font-style: italic;
+  }
+
+  /* ---- Error banner --------------------------------------------- */
+  .chat-error {
+    background: var(--danger-light);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    border-radius: var(--radius-sm);
+    padding: .55rem .9rem;
+    font-size: .88rem;
+    display: none;
+    margin-top: .5rem;
+  }
+
+  .chat-error.visible { display: block; }
+
+  /* ---- Input area ----------------------------------------------- */
+  .chat-input-row {
+    display: flex;
+    gap: .5rem;
+    margin-top: .75rem;
+    align-items: flex-end;
+  }
+
+  .chat-textarea {
+    flex: 1;
+    min-height: 48px;
+    max-height: 160px;
+    resize: vertical;
+    padding: .65rem .9rem;
+    font-family: var(--font-body);
+    font-size: .9rem;
+    color: var(--ink);
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color .2s;
+    line-height: 1.5;
+  }
+
+  .chat-textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .chat-send-btn {
+    padding: .65rem 1.2rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: .9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .15s;
+    white-space: nowrap;
+    height: 48px;
+  }
+
+  .chat-send-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="chat-section">
+  <h1 class="chat-heading">AI Expense Assistant</h1>
+  <p class="chat-subheading">Ask me to add, view, or summarise your expenses.</p>
+
+  <!-- Quick-prompt pills -->
+  <div class="chat-prompts" id="chatPrompts">
+    <button class="chat-prompt-btn" type="button" data-prompt="Add 200 for lunch today">💬 Add 200 for lunch today</button>
+    <button class="chat-prompt-btn" type="button" data-prompt="Show my expenses this month">📋 Show my expenses this month</button>
+    <button class="chat-prompt-btn" type="button" data-prompt="Summarize this month by category">📊 Summarize this month by category</button>
+  </div>
+
+  <!-- Message window -->
+  <div class="chat-window" id="chatWindow">
+    <p class="chat-empty" id="chatEmpty">Start the conversation below ↓</p>
+  </div>
+
+  <!-- Error banner -->
+  <div class="chat-error" id="chatError" role="alert"></div>
+
+  <!-- Input row -->
+  <div class="chat-input-row">
+    <textarea
+      id="chatInput"
+      class="chat-textarea"
+      placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+      rows="1"
+      maxlength="1000"
+      autocomplete="off"
+    ></textarea>
+    <button id="chatSend" class="chat-send-btn" type="button">Send</button>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------------------------------------------------------- */
+  /* State                                                             */
+  /* ---------------------------------------------------------------- */
+  const MAX_HISTORY = 10;
+  let history = [];   // [{role, content}, …] — last MAX_HISTORY items
+  let busy = false;
+
+  /* ---------------------------------------------------------------- */
+  /* DOM refs                                                          */
+  /* ---------------------------------------------------------------- */
+  const win    = document.getElementById("chatWindow");
+  const input  = document.getElementById("chatInput");
+  const send   = document.getElementById("chatSend");
+  const errBox = document.getElementById("chatError");
+  const empty  = document.getElementById("chatEmpty");
+
+  /* ---------------------------------------------------------------- */
+  /* Helpers                                                           */
+  /* ---------------------------------------------------------------- */
+  function setError(msg) {
+    errBox.textContent = msg;
+    errBox.classList.add("visible");
+  }
+
+  function clearError() {
+    errBox.textContent = "";
+    errBox.classList.remove("visible");
+  }
+
+  function appendMsg(role, text, isThinking) {
+    if (empty) empty.style.display = "none";
+
+    const wrap   = document.createElement("div");
+    const label  = document.createElement("span");
+    const bubble = document.createElement("div");
+
+    wrap.className   = "msg msg-" + role + (isThinking ? " msg-thinking" : "");
+    label.className  = "msg-label";
+    bubble.className = "msg-bubble";
+
+    label.textContent  = role === "user" ? "You" : "Spendly AI";
+    bubble.textContent = text;   // textContent — never innerHTML
+
+    wrap.appendChild(label);
+    wrap.appendChild(bubble);
+    win.appendChild(wrap);
+    win.scrollTop = win.scrollHeight;
+    return wrap;
+  }
+
+  function setBusy(val) {
+    busy = val;
+    send.disabled  = val;
+    input.disabled = val;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Send                                                              */
+  /* ---------------------------------------------------------------- */
+  async function doSend(text) {
+    text = text.trim();
+    if (!text || busy) return;
+    if (text.length > 1000) {
+      setError("Message must be 1000 characters or fewer.");
+      return;
+    }
+
+    clearError();
+    appendMsg("user", text);
+
+    // Add to history BEFORE sending (will be trimmed to MAX_HISTORY)
+    history.push({ role: "user", content: text });
+    if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY);
+
+    input.value = "";
+    input.style.height = "";
+
+    setBusy(true);
+    const thinkEl = appendMsg("assistant", "Thinking…", true);
+
+    try {
+      const resp = await fetch("/chat/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, history: history.slice(0, -1) }),
+      });
+
+      const data = await resp.json();
+
+      // Remove thinking bubble
+      win.removeChild(thinkEl);
+
+      if (!resp.ok) {
+        if (resp.status === 401) {
+          setError((data && data.error) || "Session expired, please log in again.");
+        } else {
+          setError((data && data.error) || "Something went wrong, try again.");
+        }
+        // Don't add failed assistant turn to history
+        history.pop();  // remove the user msg we pushed
+      } else {
+        const reply = (data && data.reply) || "";
+        appendMsg("assistant", reply);
+        history.push({ role: "assistant", content: reply });
+        if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY);
+      }
+    } catch (err) {
+      win.removeChild(thinkEl);
+      setError("Network error — check your connection and try again.");
+      history.pop();
+    } finally {
+      setBusy(false);
+      input.focus();
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Event listeners                                                   */
+  /* ---------------------------------------------------------------- */
+  send.addEventListener("click", function () {
+    doSend(input.value);
+  });
+
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      doSend(input.value);
+    }
+  });
+
+  // Auto-grow textarea
+  input.addEventListener("input", function () {
+    this.style.height = "auto";
+    this.style.height = Math.min(this.scrollHeight, 160) + "px";
+  });
+
+  // Quick prompt pills
+  document.getElementById("chatPrompts").addEventListener("click", function (e) {
+    const btn = e.target.closest("[data-prompt]");
+    if (!btn) return;
+    doSend(btn.dataset.prompt);
+  });
+}());
+</script>
+{% endblock %}

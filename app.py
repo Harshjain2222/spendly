@@ -1,11 +1,21 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3
+from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from sqlalchemy.exc import IntegrityError
 import re
 import os
 from datetime import datetime, timedelta
 import calendar
-from database.db import get_db, init_db, seed_db
+
+from dotenv import load_dotenv
+load_dotenv()
+
+from chat_client import chat_reply, SessionExpired
+
+from database.db import db, configure_db
+from database.models import User, Expense
 from database.queries import (
     get_user_by_id,
     get_summary_stats,
@@ -21,11 +31,29 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "spendly-dev-secret-key-change-in-production")
 
 # ------------------------------------------------------------------ #
-# Database bootstrap                                                  #
+# Rate limiter (Flask-Limiter)                                        #
 # ------------------------------------------------------------------ #
-with app.app_context():
-    init_db()
-    seed_db()
+
+def _rate_limit_key():
+    """Key by user_id when logged in, fall back to IP."""
+    uid = session.get("user_id")
+    if uid:
+        return f"user:{uid}"
+    return get_remote_address()
+
+limiter = Limiter(
+    key_func=_rate_limit_key,
+    app=app,
+    default_limits=[],
+    storage_uri="memory://",
+)
+
+# ------------------------------------------------------------------ #
+# Database setup (Flask-SQLAlchemy + Flask-Migrate)                   #
+# Schema is managed via `flask db migrate` / `flask db upgrade`.     #
+# ------------------------------------------------------------------ #
+configure_db(app)
+migrate = Migrate(app, db)
 
 
 # ------------------------------------------------------------------ #
@@ -56,22 +84,18 @@ def register():
         if len(password) < 8:
             return render_template("register.html", error="Password must be at least 8 characters long.", name=name, email=email)
 
-        db = get_db()
         try:
-            existing = db.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+            existing = db.session.query(User).filter_by(email=email).first()
             if existing:
                 return render_template("register.html", error="Email is already registered.", name=name, email=email)
 
             password_hash = generate_password_hash(password)
-            db.execute(
-                "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-                (name, email, password_hash),
-            )
-            db.commit()
-        except sqlite3.IntegrityError:
+            new_user = User(name=name, email=email, password_hash=password_hash)
+            db.session.add(new_user)
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
             return render_template("register.html", error="Email is already registered.", name=name, email=email)
-        finally:
-            db.close()
 
         return redirect(url_for("login"))
 
@@ -90,15 +114,13 @@ def login():
         if not email or not password:
             return render_template("login.html", error="All fields are required.", email=email)
 
-        db = get_db()
-        user = db.execute("SELECT id, name, email, password_hash FROM users WHERE email = ?", (email,)).fetchone()
-        db.close()
+        user = db.session.query(User).filter_by(email=email).first()
 
-        if not user or not check_password_hash(user["password_hash"], password):
+        if not user or not check_password_hash(user.password_hash, password):
             return render_template("login.html", error="Invalid email or password.", email=email)
 
-        session["user_id"] = user["id"]
-        session["user_name"] = user["name"]
+        session["user_id"] = user.id
+        session["user_name"] = user.name
         return redirect(url_for("profile"))
 
     return render_template("login.html")
@@ -115,7 +137,7 @@ def privacy():
 
 
 # ------------------------------------------------------------------ #
-# Placeholder routes — students will implement these                  #
+# Authenticated routes                                                #
 # ------------------------------------------------------------------ #
 
 @app.route("/logout")
@@ -212,6 +234,8 @@ CATEGORIES = [
     "Health",
     "Entertainment",
     "Shopping",
+    "Education",
+    "Investments",
     "Other",
 ]
 
@@ -375,6 +399,71 @@ def delete_expense(id):
 
     delete_expense_query(id, user_id)
     return redirect(url_for("profile"))
+
+
+# ------------------------------------------------------------------ #
+# AI Chat routes                                                      #
+# ------------------------------------------------------------------ #
+
+@app.route("/chat")
+def chat():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("login"))
+    return render_template("chat.html")
+
+
+@app.route("/chat/message", methods=["POST"])
+@limiter.limit("20 per minute; 100 per day")
+def chat_message():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid JSON body."}), 400
+
+    # Validate message
+    message = data.get("message", "")
+    if not isinstance(message, str) or not message.strip():
+        return jsonify({"error": "message must be a non-empty string."}), 400
+    if len(message) > 1000:
+        return jsonify({"error": "message must be 1000 characters or fewer."}), 400
+
+    # Validate history
+    history = data.get("history", [])
+    if not isinstance(history, list):
+        return jsonify({"error": "history must be a list."}), 400
+    if len(history) > 10:
+        return jsonify({"error": "history may contain at most 10 items."}), 400
+    for item in history:
+        if not isinstance(item, dict):
+            return jsonify({"error": "Each history item must be an object."}), 400
+        if item.get("role") not in ("user", "assistant"):
+            return jsonify({"error": "Each history item role must be 'user' or 'assistant'."}), 400
+        if not isinstance(item.get("content", ""), str):
+            return jsonify({"error": "Each history item content must be a string."}), 400
+
+    try:
+        try:
+            from langchain_openai.chat_models._client_utils import _cached_async_httpx_client
+            _cached_async_httpx_client.cache_clear()
+        except Exception:
+            pass
+        reply = chat_reply(user_id, history, message.strip())
+        return jsonify({"reply": reply})
+    except SessionExpired:
+        return jsonify({"error": "Session expired, please log in again."}), 401
+    except Exception:
+        app.logger.exception("chat_message error for user_id=%s", user_id)
+        return jsonify({"error": "Something went wrong, try again."}), 500
+    finally:
+        try:
+            from langchain_openai.chat_models._client_utils import _cached_async_httpx_client
+            _cached_async_httpx_client.cache_clear()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
